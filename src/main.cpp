@@ -18,7 +18,7 @@
 #include <Adafruit_HTU21DF.h>     // HTU21
 #include <Adafruit_CCS811.h>      // CCS811
 #include <ThingSpeak.h>
-#include "Tauno_secrets.h"
+#include "Tauno_secrets.h"        // Passwords
 
 /* Enable debug info Serial print */
 #define DEBUG
@@ -48,11 +48,22 @@ Adafruit_HTU21DF Htu = Adafruit_HTU21DF();
 Adafruit_CCS811 Ccs;
 
 /* millis() */
-uint32_t previous_millis {};
+uint32_t prev_measure_ms {};
 const uint MEASURE_INTERVAL {60*1000};  // 60s
 bool is_measurement_time = false;
 
+uint32_t prev_display_ms {};
+const uint DISPLAY_CHANGE_INTERVAL {2*1000};  // 2s
+bool is_display_change_time = false;
+
 WiFiClient  client;
+
+/* Global variables */
+float htu21_temp {};
+float htu21_hum {};
+int ccs811_eCO2 {};
+int ccs811_TVOC {};
+int display_sequence {};
 
 /********************************************/
 
@@ -98,6 +109,10 @@ void setup() {
   display.display();  // Adafruit splash screen
   delay(2000);
   display.clearDisplay();  // Clear the buffer
+  display.setFont(&FreeSans9pt7b);
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.invertDisplay(true);
 
   /* HTU21D setup */
   if (!Htu.begin()) {
@@ -116,10 +131,16 @@ void setup() {
 }
 
 void loop() {
-  uint32 current_millis = millis();
-  if ((current_millis - previous_millis) >= MEASURE_INTERVAL) {
+  uint32 current_ms = millis();
+
+  if ((current_ms - prev_display_ms) >= DISPLAY_CHANGE_INTERVAL) {
+    is_display_change_time = true;
+    prev_display_ms = current_ms;
+  }
+
+  if ((current_ms - prev_measure_ms) >= MEASURE_INTERVAL) {
     is_measurement_time = true;
-    previous_millis = current_millis;
+    prev_measure_ms = current_ms;
   }
 
   if (is_measurement_time) {
@@ -127,8 +148,8 @@ void loop() {
     maintain_wifi();
 
     /* HTU21D humidity sensor */
-    float htu21_temp = Htu.readTemperature();
-    float htu21_hum = Htu.readHumidity();
+    htu21_temp = Htu.readTemperature();
+    htu21_hum = Htu.readHumidity();
     DEBUG_PRINT("Temp: ");
     DEBUG_PRINT(htu21_temp);
     DEBUG_PRINT(" Hum: ");
@@ -136,8 +157,6 @@ void loop() {
 
     /* CCS811 co2 sensor */
     bool ccs811_available = Ccs.available();  // True if data is available
-    int ccs811_eCO2 {};
-    int ccs811_TVOC {};
 
     if (ccs811_available) {
       bool ccs811_error = Ccs.readData();  // True if an error
@@ -165,5 +184,51 @@ void loop() {
       DEBUG_PRINT("Http error: ");
       DEBUG_PRINTLN(http_status);
     }
-  }  // time end
+  }  // is_measurement_time end
+
+  /* OLED display: */
+  if (is_display_change_time) {
+    is_display_change_time = false;
+    display_sequence += 1;
+    display.setCursor(0, 25);  // oleneb fondist!
+
+    // iga 1000ms järel kuvame uut näitu
+    switch (display_sequence) {
+    case 1:
+      display.setTextSize(2);
+      display.print(htu21_temp);
+      display.setTextSize(1);
+      display.print(" C");
+      display.display();
+      display.clearDisplay();
+      break;
+    case 2:
+    display.setTextSize(2);
+      display.print(htu21_hum);
+      display.setTextSize(1);
+      display.print(" %");
+      display.display();
+      display.clearDisplay();
+      break;
+    case 3:
+      display.setTextSize(2);
+      display.print(ccs811_eCO2);
+      display.setTextSize(1);
+      display.print(" ppm");
+      display.display();
+      display.clearDisplay();
+      break;
+    case 4:
+      display.setTextSize(2);
+      display.print(ccs811_TVOC);
+      display.setTextSize(1);
+      display.print(" ppb");
+      display.display();
+      display.clearDisplay();
+      break;
+    default:
+      display_sequence = 0;
+      break;
+    }  // switch end
+  }
 }
