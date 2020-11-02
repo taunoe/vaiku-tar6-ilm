@@ -36,17 +36,24 @@ ESP8266WiFiMulti wifiMulti;
 // WiFi connect timeout per AP. Increase when connecting takes longer.
 const uint32_t connectTimeoutMs {5000};
 
-/* OLED */
+WiFiClient  client;  // ThingSpeak
+
+/* OLED display */
 const int SCREEN_WIDTH {128};  // OLED display width, in pixels
 const int SCREEN_HEIGHT {32};  // OLED display height, in pixels
 const int OLED_RESET_PIN {0};
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET_PIN);
+int display_sequence {};  // data display order on OLED
 
 /* HTU21DF */
 Adafruit_HTU21DF Htu = Adafruit_HTU21DF();
+float htu21_temp {};
+float htu21_hum {};
 
 /* CCS811 */
 Adafruit_CCS811 Ccs;
+int ccs811_eCO2 {};
+int ccs811_TVOC {};
 
 /* RCWK-0516 */
 const int RADAR_PIN {14};  // D5
@@ -73,27 +80,18 @@ uint32_t prev_display_ms {};
 const uint DISPLAY_CHANGE_INTERVAL {2*1000};  // 2s
 bool is_display_change_time = false;
 
-WiFiClient  client;
-
-/* Global variables */
-float htu21_temp {};
-float htu21_hum {};
-int ccs811_eCO2 {};
-int ccs811_TVOC {};
-int display_sequence {};
-
 /********************************************/
 void pixel_rainbow(int wait) {
   // Hue of first pixel runs 5 complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
   // means we'll make 5*65536/256 = 1280 passes through this outer loop:
-  for (long firstPixelHue = 0; firstPixelHue < 5*65536; firstPixelHue += 256) {
+  for (int32 firstPxHue = 0; firstPxHue < 5*65536; firstPxHue += 256) {
     for (int i = 0; i < pixel.numPixels(); i++) {  // For each pixel in strip...
       // Offset pixel hue by an amount to make one full revolution of the
       // color wheel (range of 65536) along the length of the strip
       // (strip.numPixels() steps):
-      int pixelHue = firstPixelHue + (i * 65536L / pixel.numPixels());
+      int pixelHue = firstPxHue + (i * 65536L / pixel.numPixels());
       // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
       // optionally add saturation and value (brightness) (each 0 to 255).
       // Here we're using just the single-argument hue variant. The result
@@ -186,15 +184,16 @@ void setup() {
 
 
 void loop() {
-  uint32 current_ms = millis();
+  uint32_t current_ms = millis();
 
   bool motion = digitalRead(RADAR_PIN);
 
   if (motion) {
-    // DEBUG_PRINT("Motion ");
-    pixel_rainbow(10);
+    DEBUG_PRINT("Motion ");
+    pixel_rainbow(5);
     pixel_off();
   }
+
 
   if ((current_ms - prev_display_ms) >= DISPLAY_CHANGE_INTERVAL) {
     is_display_change_time = true;
@@ -253,7 +252,7 @@ void loop() {
   if (is_display_change_time) {
     is_display_change_time = false;
     display_sequence += 1;
-    display.setCursor(0, 25);  // oleneb fondist!
+    display.setCursor(3, 25);  // oleneb fondist!
 
     // iga 1000ms järel kuvame uut näitu
     switch (display_sequence) {
