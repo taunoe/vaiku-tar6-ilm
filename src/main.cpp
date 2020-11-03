@@ -187,7 +187,6 @@ void loop() {
   uint32_t current_ms = millis();
 
   bool motion = digitalRead(RADAR_PIN);
-
   if (motion) {
     DEBUG_PRINT("Motion ");
     pixel_rainbow(5);
