@@ -7,6 +7,10 @@
  *        D1 - SCL
  *        D2 - SDA
  * Sensors: - HTU21D-F Temperature & Humidity Sensor
+ * 
+ * TODO: 
+ *  - ledi kiirus olenevalt liikumisest
+ *  - ledi värvi muutumine ajajooksul
  */
 #include <Arduino.h>
 #include <ESP8266WiFiMulti.h>
@@ -44,6 +48,7 @@ const int SCREEN_HEIGHT {32};  // OLED display height, in pixels
 const int OLED_RESET_PIN {0};
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET_PIN);
 int display_sequence {};  // data display order on OLED
+bool is_inverted {true};
 
 /* HTU21DF */
 Adafruit_HTU21DF Htu = Adafruit_HTU21DF();
@@ -57,6 +62,7 @@ int ccs811_TVOC {};
 
 /* RCWK-0516 */
 const int RADAR_PIN {14};  // D5
+int radar_data {};
 
 /* NeoPixel stripe */
 const int PIXEL_PIN {12};  // D6
@@ -79,6 +85,14 @@ bool is_measurement_time = false;
 uint32_t prev_display_ms {};
 const uint DISPLAY_CHANGE_INTERVAL {2*1000};  // 2s
 bool is_display_change_time = false;
+
+uint32_t prev_pixel_ms {};
+const uint PIXEL_INTERVAL {300};
+bool is_pixel_time = false;
+int current_pixel {};
+int r {};
+int g {100};
+int b {};
 
 /********************************************/
 void pixel_rainbow(int wait) {
@@ -114,7 +128,7 @@ void pixel_off() {
 void maintain_wifi() {
   /* Maintain WiFi connection */
   if (wifiMulti.run(connectTimeoutMs) == WL_CONNECTED) {
-    DEBUG_PRINT("WiFi SSID: ");
+    DEBUG_PRINT("\nWiFi SSID: ");
     DEBUG_PRINT(WiFi.SSID());
     DEBUG_PRINT(" ");
     DEBUG_PRINTLN(WiFi.localIP());
@@ -156,7 +170,7 @@ void setup() {
   display.setFont(&FreeSans9pt7b);
   display.setTextSize(2);
   display.setTextColor(WHITE);
-  display.invertDisplay(true);
+  display.invertDisplay(is_inverted);
 
   /* HTU21D setup */
   if (!Htu.begin()) {
@@ -186,22 +200,48 @@ void setup() {
 void loop() {
   uint32_t current_ms = millis();
 
-  bool motion = digitalRead(RADAR_PIN);
-  if (motion) {
-    DEBUG_PRINT("Motion ");
-    pixel_rainbow(5);
-    pixel_off();
-  }
-
-
+  // Check the time: display change
   if ((current_ms - prev_display_ms) >= DISPLAY_CHANGE_INTERVAL) {
     is_display_change_time = true;
     prev_display_ms = current_ms;
   }
 
+  // Check the time: measurment
   if ((current_ms - prev_measure_ms) >= MEASURE_INTERVAL) {
     is_measurement_time = true;
     prev_measure_ms = current_ms;
+  }
+
+  // Check the time: pixel change
+  if ((current_ms - prev_pixel_ms) >= PIXEL_INTERVAL) {
+    is_pixel_time = true;
+    prev_pixel_ms = current_ms;
+  }
+
+  // Motion detection is on all time!
+  bool motion = digitalRead(RADAR_PIN);
+  // If there was a movement, we store it.
+  if (motion) {
+    radar_data = 1;
+    r = 200;
+    g = 10;
+    b = 10;
+  }
+
+  if (is_pixel_time) {
+    is_pixel_time = false;
+    DEBUG_PRINT("Current pixel ");
+    DEBUG_PRINTLN(current_pixel);
+    if (current_pixel == PIXEL_COUNT) {
+      current_pixel = 0;
+    }
+    pixel.clear();
+    pixel.setPixelColor(current_pixel, r, g, b);  // (n, r, g, b)
+    pixel.show();
+    current_pixel++;
+    r = 10;
+    g = 200;
+    b = 10;
   }
 
   if (is_measurement_time) {
@@ -233,18 +273,26 @@ void loop() {
       }
     }
 
+    if (radar_data) {
+      DEBUG_PRINTLN("There was a movement.");
+    } else {
+      DEBUG_PRINTLN("There was no movement.");
+    }
+
     /* ThingSpeak */
     // Prepare ThingSpeak package
     ThingSpeak.setField(1, ccs811_eCO2);
     ThingSpeak.setField(2, ccs811_TVOC);
     ThingSpeak.setField(3, htu21_temp);
     ThingSpeak.setField(4, htu21_hum);
+    ThingSpeak.setField(5, radar_data);
     // Send to ThingSpeak
     int http_status = ThingSpeak.writeFields(Secret::id, Secret::key);
     if (http_status != 200) {
       DEBUG_PRINT("Http error: ");
       DEBUG_PRINTLN(http_status);
     }
+    radar_data = 0;  // After we have send data
   }  // is_measurement_time end
 
   /* OLED display: */
@@ -252,6 +300,9 @@ void loop() {
     is_display_change_time = false;
     display_sequence += 1;
     display.setCursor(3, 25);  // oleneb fondist!
+    // flip display
+    is_inverted ^= 1;
+    display.invertDisplay(is_inverted);
 
     // iga 1000ms järel kuvame uut näitu
     switch (display_sequence) {
@@ -291,5 +342,5 @@ void loop() {
       display_sequence = 0;
       break;
     }  // switch end
-  }
+  }  // is_display_change_time end
 }
