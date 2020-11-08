@@ -88,11 +88,14 @@ bool is_display_change_time = false;
 
 uint32_t prev_pixel_ms {};
 const uint PIXEL_INTERVAL {300};
+const uint SLOW {300};
+const uint FAST {100};
 bool is_pixel_time = false;
 int current_pixel {};
-int r {};
-int g {100};
-int b {};
+uint pixel_speed {SLOW};
+uint8_t r {};
+uint8_t g {255};
+uint8_t b {};
 
 /********************************************/
 void pixel_rainbow(int wait) {
@@ -213,7 +216,7 @@ void loop() {
   }
 
   // Check the time: pixel change
-  if ((current_ms - prev_pixel_ms) >= PIXEL_INTERVAL) {
+  if ((current_ms - prev_pixel_ms) >= pixel_speed) {
     is_pixel_time = true;
     prev_pixel_ms = current_ms;
   }
@@ -226,12 +229,19 @@ void loop() {
     r = 200;
     g = 10;
     b = 10;
+    pixel_speed = FAST;
   }
 
   if (is_pixel_time) {
     is_pixel_time = false;
-    DEBUG_PRINT("Current pixel ");
-    DEBUG_PRINTLN(current_pixel);
+    DEBUG_PRINT("Current px ");
+    DEBUG_PRINT(current_pixel);
+    DEBUG_PRINT(" r=");
+    DEBUG_PRINT(r);
+    DEBUG_PRINT(" g=");
+    DEBUG_PRINT(g);
+    DEBUG_PRINT(" b=");
+    DEBUG_PRINTLN(b);
     if (current_pixel == PIXEL_COUNT) {
       current_pixel = 0;
     }
@@ -242,6 +252,7 @@ void loop() {
     r = 10;
     g = 200;
     b = 10;
+    pixel_speed = SLOW;
   }
 
   if (is_measurement_time) {
