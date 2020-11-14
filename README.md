@@ -1,5 +1,7 @@
 # Väiku tarõ ilma mõõdu võtja
 
+![Väiku tarõ ilma mõõdu võtja](img/vaiku.jpg)
+
 Board:
 
 - NodeMcu V1.0 ESP12E / Lolin ver 0.1
