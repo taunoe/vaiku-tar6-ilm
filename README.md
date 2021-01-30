@@ -22,3 +22,7 @@ Other:
 - Logic level converter
 
 ![Schematic](img/Schematic_vaiku-tar6-ilm_2020-11-03_19-28-43.png)
+
+___
+
+Copyright 2021 Tauno Erik https://taunoerik.art
